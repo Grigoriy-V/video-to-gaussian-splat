@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "job_id": "mix-back-clean-v1-largest-model",
+  "source": {
+    "description": "MiniMax-generated full horizontal character orbit",
+    "local_path": "D:/ML/Ai_render/projects/spot/refs/Mix_back_clean",
+    "expected_image_count": 94,
+    "expected_width": 768,
+    "expected_height": 960,
+    "sequence_manifest_sha256": "0c50d4e1c8fc7735ebfae4fa71f78a80973d3d7fbed1efcb2cce73a3fff4ad2c"
+  },
+  "prepare": {
+    "camera_type": "simple_pinhole",
+    "matching_method": "exhaustive",
+    "sfm_tool": "colmap",
+    "num_downscales": 0,
+    "minimum_registered_images": 80,
+    "select_largest_colmap_model": true
+  },
+  "training": {
+    "method": "splatfacto",
+    "strategy": "default",
+    "background_color": "white",
+    "smoke_steps": 2000,
+    "main_steps": 30000,
+    "eval_mode": "all",
+    "downscale_factor": 1,
+    "load_3d_points": true,
+    "visualizer": "tensorboard",
+    "smoke_run_id": "splatfacto-white-smoke-v1",
+    "main_run_id": "splatfacto-white-main-v1"
+  }
+}
