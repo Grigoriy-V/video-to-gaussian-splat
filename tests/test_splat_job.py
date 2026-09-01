@@ -7,9 +7,10 @@ from splat_job import (
     expected_run_dir,
     export_command,
     load_config,
-    milestone_checkpoint_step,
     milestone_export_command,
     prepare_command,
+    checkpoint_steps,
+    resolve_milestone_checkpoint,
     training_command,
     validate_config,
 )
@@ -97,6 +98,38 @@ class SplatJobTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must equal"):
             validate_config(config)
 
+    def test_rgba_dataset_reuses_cameras_and_has_separate_identity(self) -> None:
+        config = load_config(CONFIG_PATH)
+        config["rgba"] = {
+            "enabled": True,
+            "dataset_id": "soft-alpha-v1",
+            "camera_source_job_id": "accepted-camera-job",
+        }
+        config["masks"] = {"enabled": False}
+        validate_config(config)
+        root = Path("/runs/jobs/rgba-test")
+        self.assertEqual(dataset_root(config, root), root / "datasets" / "soft-alpha-v1")
+        self.assertEqual(
+            training_command(config, root, "smoke")[training_command(config, root, "smoke").index("--data") + 1],
+            str(root / "datasets" / "soft-alpha-v1"),
+        )
+
+    def test_rgba_and_separate_masks_are_mutually_exclusive(self) -> None:
+        config = load_config(CONFIG_PATH)
+        config["rgba"] = {
+            "enabled": True,
+            "dataset_id": "soft-alpha-v1",
+            "camera_source_job_id": "accepted-camera-job",
+        }
+        config["masks"] = {
+            "enabled": True,
+            "mask_id": "binary-mask-v1",
+            "expected_count": config["source"]["expected_image_count"],
+            "sequence_manifest_sha256": "a" * 64,
+        }
+        with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+            validate_config(config)
+
     def test_milestone_training_keeps_checkpoints(self) -> None:
         config = load_config(CONFIG_PATH)
         config["training"].update({
@@ -110,9 +143,19 @@ class SplatJobTests(unittest.TestCase):
         self.assertEqual(
             command[command.index("--save-only-latest-checkpoint") + 1], "False"
         )
-        self.assertEqual(milestone_checkpoint_step(30000), 29999)
         export = milestone_export_command(Path("selected.yml"), Path("export-30k"))
         self.assertEqual(export[export.index("--load-config") + 1], "selected.yml")
+
+    def test_checkpoint_resolution_accepts_periodic_and_final_names(self) -> None:
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "step-000030000.ckpt").touch()
+            (root / "step-000039999.ckpt").touch()
+            self.assertEqual(checkpoint_steps(root), [30000, 39999])
+            self.assertEqual(resolve_milestone_checkpoint(root, 30000)[0], 30000)
+            self.assertEqual(resolve_milestone_checkpoint(root, 40000)[0], 39999)
 
     def test_milestones_must_end_at_main_steps(self) -> None:
         config = load_config(CONFIG_PATH)

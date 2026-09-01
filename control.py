@@ -19,7 +19,7 @@ def main() -> None:
     parser.add_argument(
         "--stage",
         required=True,
-        choices=("doctor", "prepare", "attach-masks", "train", "export", "status"),
+        choices=("doctor", "prepare", "attach-masks", "attach-rgba", "train", "export", "status"),
     )
     parser.add_argument("--kind", default="smoke", choices=("smoke", "main"))
     parser.add_argument("--config", type=Path, default=Path("configs/mix_back_clean_v1.json"))
@@ -27,7 +27,7 @@ def main() -> None:
     args = parser.parse_args()
 
     config = load_config(args.config)
-    function_name = "attach_masks" if args.stage == "attach-masks" else args.stage
+    function_name = args.stage.replace("-", "_")
     function = modal.Function.from_name(
         APP_NAME,
         function_name,
@@ -35,7 +35,7 @@ def main() -> None:
     )
     if args.stage in {"train", "export"}:
         result = function.remote(config, args.kind)
-    elif args.stage in {"doctor", "prepare", "attach-masks"}:
+    elif args.stage in {"doctor", "prepare", "attach-masks", "attach-rgba"}:
         result = function.remote(config)
     else:
         result = function.remote(config["job_id"])

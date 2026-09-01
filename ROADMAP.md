@@ -2,8 +2,8 @@
 
 **Updated:** 2026-09-01
 
-**Project status:** first end-to-end baseline complete; controlled preprocessing
-experiments are next
+**Project status:** soft-alpha RGBA background treatment accepted; the white
+fringe and material background outliers are resolved
 
 **Current approved step:** documentation and experiment definition only; no new
 Modal deployment, upload, GPU run, or training is authorized by this roadmap
@@ -166,7 +166,25 @@ Evaluate cross-view consistency around hair, eyes, glasses, skin, shirt edges,
 and jacket texture. The x2 sequence has four times as many pixels, so measure
 runtime and memory with a smoke before authorizing 30,000 steps.
 
-## Experiment 04: MCMC strategy -- after mask and upscale baselines
+## Experiment 04: soft-alpha RGBA with random training background -- complete
+
+The accepted run used 94 native-resolution 768 x 960 RGBA frames, a mildly
+inward-adjusted and 1 px blurred soft alpha, the accepted baseline cameras, and
+Splatfacto's per-iteration random background compositing. No separate binary
+mask was supplied and COLMAP was not rerun.
+
+The 30,000-step L4 run took 751.74 seconds and exported 68,899 Gaussians. Human
+visual inspection found that the white silhouette fringe disappeared and the
+material floating background outliers were removed without destroying the
+subject. A small residual below the cropped bust is accepted because that area
+has no source-view coverage. Full evidence is recorded in
+`reports/experiment-04-soft-alpha-rgba-3dgs.md`.
+
+Decision: use soft RGBA plus random training-background compositing as the
+accepted background treatment. The rejected hard binary-mask result remains a
+negative comparison.
+
+## Experiment 05: MCMC strategy -- after accepted soft-alpha baseline
 
 Purpose: compare Splatfacto MCMC with the default densification strategy on an
 accepted dataset configuration.
@@ -183,7 +201,7 @@ first pass a bounded smoke. Compare:
 
 Do not combine the first MCMC test with a new upscaler or new mask policy.
 
-## Experiment 05: improve splat optimization -- research track
+## Experiment 06: improve splat optimization -- research track
 
 After the controlled mask, resolution, and MCMC comparisons, investigate
 training improvements one material variable at a time. Candidate areas:
@@ -268,6 +286,12 @@ improvement.
 Detailed research notes for optical flow, NVIDIA NVOFA, inconsistency maps,
 Depth Anything, and depth-guided reconstruction are maintained in
 `docs/generated-input-consistency-research.md`.
+
+A separate proposed blockout experiment compares the intended Blender camera
+with the camera reconstructed from generated output, then evaluates fixed,
+initialized, soft-prior, and hybrid trajectories. Its conventions, metrics, and
+controlled run matrix are documented in
+`docs/blender-camera-prior-research.md`.
 
 ## Preprocessing service -- separate future component
 

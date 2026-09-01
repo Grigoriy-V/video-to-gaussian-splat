@@ -20,10 +20,11 @@ from splat_job import (
     export_command,
     image_manifest_sha256,
     job_root,
-    milestone_checkpoint_step,
     milestone_export_command,
     prepare_command,
     run_id,
+    checkpoint_steps,
+    resolve_milestone_checkpoint,
     training_command,
     validate_config,
 )
@@ -301,22 +302,109 @@ def attach_masks(config: dict[str, Any]) -> dict[str, Any]:
     return report
 
 
+@app.function(
+    image=control_image,
+    volumes={str(VOLUME_ROOT): volume},
+    min_containers=0,
+    buffer_containers=0,
+    max_containers=1,
+    scaledown_window=2,
+    retries=0,
+    timeout=5 * 60,
+)
+def attach_rgba(config: dict[str, Any]) -> dict[str, Any]:
+    """Attach RGBA images to an accepted camera solve without rerunning COLMAP."""
+    validate_config(config)
+    rgba = config.get("rgba", {"enabled": False})
+    if not rgba["enabled"]:
+        raise RuntimeError("rgba.enabled must be true")
+
+    root = job_root(VOLUME_ROOT, config["job_id"])
+    camera_root = job_root(VOLUME_ROOT, rgba["camera_source_job_id"])
+    camera_report_path = camera_root / "prepare_report.json"
+    if not camera_report_path.exists():
+        raise RuntimeError("camera source has no prepare report")
+    camera_report = json.loads(camera_report_path.read_text(encoding="utf-8"))
+    if camera_report.get("status") != "accepted":
+        raise RuntimeError("camera source preparation was not accepted")
+
+    input_report = _validate_input(config, root / "input")
+    _, images = image_manifest_sha256(root / "input")
+    non_rgba = [path.name for path in images if _png_color_type(path) != 6]
+    if non_rgba:
+        raise RuntimeError(f"RGBA input contains non-RGBA PNG files: {non_rgba[:5]}")
+
+    target = dataset_root(config, root)
+    if target.exists():
+        raise RuntimeError(f"refusing to overwrite existing RGBA dataset at {target}")
+
+    source_transforms_path = camera_root / "processed" / "transforms.json"
+    transforms = json.loads(source_transforms_path.read_text(encoding="utf-8"))
+    frames = transforms.get("frames", [])
+    if len(frames) != len(images):
+        raise RuntimeError(
+            f"camera source has {len(frames)} frames but RGBA input has {len(images)}"
+        )
+
+    target.mkdir(parents=True)
+    target_images = target / "images"
+    shutil.copytree(root / "input", target_images)
+    for frame in frames:
+        match = re.search(r"frame_(\d+)\.png$", str(frame.get("file_path", "")))
+        if match is None:
+            raise RuntimeError(f"cannot map camera frame path: {frame.get('file_path')}")
+        source_index = int(match.group(1)) - 1
+        if not 0 <= source_index < len(images):
+            raise RuntimeError(f"camera frame index is outside RGBA input: {source_index}")
+        frame["file_path"] = str((target_images / images[source_index].name).resolve())
+        frame.pop("mask_path", None)
+
+    ply_path = transforms.get("ply_file_path")
+    if ply_path and not Path(ply_path).is_absolute():
+        transforms["ply_file_path"] = str((camera_root / "processed" / ply_path).resolve())
+    _write_json(target / "transforms.json", transforms)
+    _write_json(root / "job_config.json", config)
+
+    report = {
+        "status": "accepted",
+        "dataset_id": rgba["dataset_id"],
+        "dataset_path": str(target),
+        "camera_source_job_id": rgba["camera_source_job_id"],
+        "registered_images": len(frames),
+        "input": input_report,
+        "png_color_type": 6,
+    }
+    _write_json(root / f"attach_rgba_{rgba['dataset_id']}_report.json", report)
+    volume.commit()
+    return report
+
+
 @app.function(**gpu_options, timeout=2 * 60 * 60)
 def train(config: dict[str, Any], kind: Literal["smoke", "main"]) -> dict[str, Any]:
     validate_config(config)
     root = job_root(VOLUME_ROOT, config["job_id"])
-    prepare_report_path = root / "prepare_report.json"
-    if not prepare_report_path.exists():
-        raise RuntimeError("prepare must complete before training")
-    prepare_report = json.loads(prepare_report_path.read_text(encoding="utf-8"))
-    if prepare_report.get("status") != "accepted":
-        raise RuntimeError("camera solve did not pass the registration gate")
+    rgba = config.get("rgba", {"enabled": False})
+    if rgba["enabled"]:
+        rgba_report = root / f"attach_rgba_{rgba['dataset_id']}_report.json"
+        if not rgba_report.exists() or not dataset_root(config, root).exists():
+            raise RuntimeError("attach_rgba must complete before RGBA training")
+    else:
+        prepare_report_path = root / "prepare_report.json"
+        if not prepare_report_path.exists():
+            raise RuntimeError("prepare must complete before training")
+        prepare_report = json.loads(prepare_report_path.read_text(encoding="utf-8"))
+        if prepare_report.get("status") != "accepted":
+            raise RuntimeError("camera solve did not pass the registration gate")
     if config.get("masks", {"enabled": False})["enabled"] and not dataset_root(config, root).exists():
         raise RuntimeError("attach_masks must complete before masked training")
 
     target = expected_run_dir(config, root, kind)
     if target.exists():
-        raise RuntimeError(f"refusing to overwrite existing run at {target}")
+        raise RuntimeError(
+            f"refusing to overwrite or resume existing run at {target}; "
+            "Nerfstudio 1.1.5 Splatfacto resume is not trusted because a "
+            "verified continuation advanced steps without updating tensors"
+        )
     command = training_command(config, root, kind)
     identity = run_id(config, kind)
     elapsed = _run(command, root / "logs" / f"train-{identity}.log")
@@ -327,12 +415,33 @@ def train(config: dict[str, Any], kind: Literal["smoke", "main"]) -> dict[str, A
     export_elapsed = 0.0
     if kind == "main":
         for iterations in config["training"].get("export_milestones", []):
-            checkpoint_step = milestone_checkpoint_step(iterations)
-            checkpoint = target / "nerfstudio_models" / f"step-{checkpoint_step:09d}.ckpt"
-            if not checkpoint.exists():
-                raise RuntimeError(f"missing milestone checkpoint: {checkpoint}")
+            checkpoint_step, checkpoint = resolve_milestone_checkpoint(
+                target / "nerfstudio_models", iterations
+            )
             milestone_name = f"{iterations // 1000}k"
+            legacy_export = root / "export" / identity / "splat.ply"
+            if iterations < config["training"]["main_steps"] and legacy_export.exists():
+                exports.append({
+                    "iterations": iterations,
+                    "checkpoint_step": checkpoint_step,
+                    "checkpoint_path": str(checkpoint),
+                    "elapsed_seconds": 0.0,
+                    "reused_existing": True,
+                    "output_dir": str(legacy_export.parent),
+                })
+                continue
             milestone_root = root / "export" / f"{identity}-{milestone_name}"
+            completed_ply = milestone_root / "splat" / "splat.ply"
+            if completed_ply.exists():
+                exports.append({
+                    "iterations": iterations,
+                    "checkpoint_step": checkpoint_step,
+                    "checkpoint_path": str(checkpoint),
+                    "elapsed_seconds": 0.0,
+                    "reused_existing": True,
+                    "output_dir": str(completed_ply.parent),
+                })
+                continue
             if milestone_root.exists():
                 raise RuntimeError(f"refusing to overwrite milestone export at {milestone_root}")
             selected_config = milestone_root / "config.yml"

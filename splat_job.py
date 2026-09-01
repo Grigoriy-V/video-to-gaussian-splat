@@ -48,6 +48,19 @@ def validate_config(config: dict[str, Any]) -> None:
         if not isinstance(mask_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", mask_digest):
             raise ValueError("masks.sequence_manifest_sha256 must be a lowercase SHA-256")
 
+    rgba = config.get("rgba", {"enabled": False})
+    if not isinstance(rgba.get("enabled"), bool):
+        raise ValueError("rgba.enabled must be a boolean")
+    if rgba["enabled"]:
+        if masks["enabled"]:
+            raise ValueError("rgba input and separate masks are mutually exclusive")
+        dataset_id = rgba.get("dataset_id")
+        if not isinstance(dataset_id, str) or not JOB_ID_RE.fullmatch(dataset_id):
+            raise ValueError("rgba.dataset_id must contain only lowercase letters, digits, and hyphens")
+        camera_job_id = rgba.get("camera_source_job_id")
+        if not isinstance(camera_job_id, str) or not JOB_ID_RE.fullmatch(camera_job_id):
+            raise ValueError("rgba.camera_source_job_id must be a safe job ID")
+
     prepare = config.get("prepare", {})
     minimum = prepare.get("minimum_registered_images")
     if not isinstance(minimum, int) or not 1 <= minimum <= source["expected_image_count"]:
@@ -101,6 +114,9 @@ def image_manifest_sha256(image_dir: Path) -> tuple[str, list[Path]]:
 
 
 def dataset_root(config: dict[str, Any], root: Path) -> Path:
+    rgba = config.get("rgba", {"enabled": False})
+    if rgba["enabled"]:
+        return root / "datasets" / rgba["dataset_id"]
     masks = config.get("masks", {"enabled": False})
     if masks["enabled"]:
         return root / "datasets" / masks["mask_id"]
@@ -216,11 +232,29 @@ def export_command(config: dict[str, Any], root: Path, kind: str) -> list[str]:
     ]
 
 
-def milestone_checkpoint_step(iterations: int) -> int:
-    """Map a human iteration count to Nerfstudio's zero-based checkpoint step."""
+def checkpoint_steps(checkpoint_dir: Path) -> list[int]:
+    steps = []
+    for path in checkpoint_dir.glob("step-*.ckpt"):
+        match = re.fullmatch(r"step-(\d{9})\.ckpt", path.name)
+        if match:
+            steps.append(int(match.group(1)))
+    return sorted(steps)
+
+
+def resolve_milestone_checkpoint(
+    checkpoint_dir: Path, iterations: int
+) -> tuple[int, Path]:
+    """Resolve periodic (N) or final (N-1) Nerfstudio checkpoint naming."""
     if iterations <= 0:
         raise ValueError("iterations must be positive")
-    return iterations - 1
+    available = set(checkpoint_steps(checkpoint_dir))
+    for step in (iterations, iterations - 1):
+        if step in available:
+            return step, checkpoint_dir / f"step-{step:09d}.ckpt"
+    raise FileNotFoundError(
+        f"no checkpoint for {iterations} iterations under {checkpoint_dir}; "
+        f"available steps: {sorted(available)}"
+    )
 
 
 def milestone_export_command(

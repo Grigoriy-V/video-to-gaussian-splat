@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "job_id": "mix-back-clean-v3-soft-alpha-native",
+  "source": {
+    "description": "MiniMax-generated character orbit with BiRefNet/VITMatte soft alpha, inward adjustment 2 and 1 px blur",
+    "local_path": "D:/ML/gaussian-splat-modal/Input/test 3/Splat_test_3_alpha",
+    "expected_image_count": 94,
+    "expected_width": 768,
+    "expected_height": 960,
+    "sequence_manifest_sha256": "4e12367cfa629f27d1a11b0dc9e4a8d352333193f06f922ad256152cba92b9f6"
+  },
+  "rgba": {
+    "enabled": true,
+    "dataset_id": "soft-alpha-erode2-blur1-v1",
+    "camera_source_job_id": "mix-back-clean-v1-largest-model"
+  },
+  "masks": {
+    "enabled": false
+  },
+  "prepare": {
+    "camera_type": "simple_pinhole",
+    "matching_method": "exhaustive",
+    "sfm_tool": "colmap",
+    "num_downscales": 0,
+    "minimum_registered_images": 80,
+    "select_largest_colmap_model": true
+  },
+  "training": {
+    "method": "splatfacto",
+    "strategy": "default",
+    "background_color": "random",
+    "smoke_steps": 2000,
+    "main_steps": 30000,
+    "eval_mode": "all",
+    "downscale_factor": 1,
+    "load_3d_points": true,
+    "visualizer": "tensorboard",
+    "smoke_run_id": "splatfacto-rgba-random-smoke-v1",
+    "main_run_id": "splatfacto-rgba-random-main-30k-v1"
+  }
+}
