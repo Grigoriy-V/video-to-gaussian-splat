@@ -2,8 +2,11 @@ __pycache__/
 .pytest_cache/
 *.py[cod]
 .env
+.venv/
+*.egg-info/
 
 # Inputs, checkpoints, exports, and logs live in the Modal Volume.
 data/
 runs/
 results/
+Input/

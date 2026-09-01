@@ -35,6 +35,37 @@ dependency. The reconstruction pipeline remains useful for ordinary captured
 or rendered video, while generated video is the primary experimental input at
 the current stage.
 
+The proposed independent masking and upscaling service, the first local
+ComfyUI proof of concept, and the controlled reconstruction comparisons are
+recorded in the
+[preprocessing App design](docs/preprocessing-app-design.md).
+
+## Long-term role in generation
+
+The intended output is not only a standalone PLY for viewing. A reconstructed
+splat should eventually act as a reusable, camera-controllable 3D prior for
+subsequent image and video generation:
+
+```text
+references -> generated camera coverage -> Gaussian Splat
+                                      |
+                                      v
+                    aligned RGB / alpha / depth / normals
+                                      |
+                                      v
+                    new image or video generation
+```
+
+This creates a possible iterative loop: reconstruct a preliminary scene, render
+consistent views or geometry-derived controls, generate missing views, validate
+them, and reconstruct again. The splat may therefore serve both as an output and
+as structural support for later generation.
+
+This feedback loop is future research, not a currently implemented capability.
+Generated or completed surfaces are not ground truth, and support for a
+particular conditioning format depends on the downstream generation model. The
+ordered experiment plan is maintained in [ROADMAP.md](ROADMAP.md).
+
 MP4 ingestion is not implemented yet. Extract frames first with FFmpeg or
 another tool, then upload the ordered PNG sequence.
 
@@ -53,6 +84,10 @@ another tool, then upload the ordered PNG sequence.
 The current baseline uses ordinary Splatfacto. Foreground masks, MCMC, automatic
 PLY cleanup, direct video ingestion, and held-out evaluation are not part of the
 baseline implementation.
+
+The current experiment order is: completed native unmasked baseline, native
+frames with foreground masks, x2-upscaled frames with the same masks, MCMC, and
+then isolated improvements to splat optimization and evaluation.
 
 ## First experiment
 
@@ -201,6 +236,37 @@ Launch and export the main run only after accepting the smoke result:
 & $modalPython control.py --config $config --stage export --kind main
 ```
 
+### Foreground-mask experiment
+
+The first masked comparison reuses the accepted 94-camera solution and creates
+an immutable derived Nerfstudio dataset. It does not modify the baseline
+`processed/` directory or its training runs.
+
+Upload the reviewed one-channel masks under their frozen mask identity:
+
+```powershell
+$config = "configs/mix_back_clean_v1_masked_birefnet.json"
+
+& $modalPython -m modal volume put gaussian-splat-runs `
+  "Input/test 2/Splat_test_2_mask_1ch" `
+  "/jobs/mix-back-clean-v1-largest-model/masks/birefnet-binary-v1" `
+  -e main
+
+& $modalPython control.py --config $config --stage attach-masks
+& $modalPython control.py --config $config --stage train --kind smoke
+& $modalPython control.py --config $config --stage export --kind smoke
+```
+
+Inspect the smoke export before separately authorizing the 30,000-step run:
+
+```powershell
+& $modalPython control.py --config $config --stage train --kind main
+& $modalPython control.py --config $config --stage export --kind main
+```
+
+`attach-masks` verifies count, dimensions, one-channel PNG encoding, and the
+frozen mask manifest before adding one `mask_path` to each registered frame.
+
 Status is read through the Modal SDK and does not request a GPU:
 
 ```powershell
@@ -217,6 +283,7 @@ modal_app.py     Modal App, Volume, images, and batch functions
 control.py       local SDK client for deployed functions
 splat_job.py     validation and command construction
 configs/         immutable experiment configurations
+docs/            design notes and research plans
 reports/         experiment results and limitations
 tests/           offline unit tests
 ```

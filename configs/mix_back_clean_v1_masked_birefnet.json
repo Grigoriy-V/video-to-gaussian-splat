@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "job_id": "mix-back-clean-v1-largest-model",
+  "source": {
+    "description": "MiniMax-generated full horizontal character orbit",
+    "local_path": "D:/ML/Ai_render/projects/spot/refs/Mix_back_clean",
+    "expected_image_count": 94,
+    "expected_width": 768,
+    "expected_height": 960,
+    "sequence_manifest_sha256": "0c50d4e1c8fc7735ebfae4fa71f78a80973d3d7fbed1efcb2cce73a3fff4ad2c"
+  },
+  "masks": {
+    "enabled": true,
+    "mask_id": "birefnet-binary-v1",
+    "local_path": "D:/ML/gaussian-splat-modal/Input/test 2/Splat_test_2_mask_1ch",
+    "expected_count": 94,
+    "sequence_manifest_sha256": "c2fcbcc6b6d888c597b18a89f08e0eeecc83a370e4317b05a9c29134dcc75225"
+  },
+  "prepare": {
+    "camera_type": "simple_pinhole",
+    "matching_method": "exhaustive",
+    "sfm_tool": "colmap",
+    "num_downscales": 0,
+    "minimum_registered_images": 80,
+    "select_largest_colmap_model": true
+  },
+  "training": {
+    "method": "splatfacto",
+    "strategy": "default",
+    "background_color": "white",
+    "smoke_steps": 2000,
+    "main_steps": 30000,
+    "eval_mode": "all",
+    "downscale_factor": 1,
+    "load_3d_points": true,
+    "visualizer": "tensorboard",
+    "smoke_run_id": "splatfacto-white-mask-birefnet-smoke-v1",
+    "main_run_id": "splatfacto-white-mask-birefnet-main-v1"
+  }
+}

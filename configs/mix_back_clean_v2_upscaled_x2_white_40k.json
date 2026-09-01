@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "job_id": "mix-back-clean-v2-upscaled-x2",
+  "source": {
+    "description": "MiniMax-generated full horizontal character orbit, locally upscaled x2 with 2xLiveActionV1_SPAN_490000.pth",
+    "local_path": "D:/ML/gaussian-splat-modal/Input/test 2/Splat_test_2_upsc",
+    "expected_image_count": 94,
+    "expected_width": 1536,
+    "expected_height": 1920,
+    "sequence_manifest_sha256": "1d00c10aaa40eb511398f469a6d269e34b3382d0d673506277544ff712af1564"
+  },
+  "masks": {
+    "enabled": false
+  },
+  "prepare": {
+    "camera_type": "simple_pinhole",
+    "matching_method": "exhaustive",
+    "sfm_tool": "colmap",
+    "num_downscales": 0,
+    "minimum_registered_images": 80,
+    "select_largest_colmap_model": true
+  },
+  "training": {
+    "method": "splatfacto",
+    "strategy": "default",
+    "background_color": "white",
+    "smoke_steps": 2000,
+    "main_steps": 40000,
+    "steps_per_save": 10000,
+    "export_milestones": [30000, 40000],
+    "eval_mode": "all",
+    "downscale_factor": 1,
+    "load_3d_points": true,
+    "visualizer": "tensorboard",
+    "smoke_run_id": "splatfacto-white-upscaled-x2-smoke-v1",
+    "main_run_id": "splatfacto-white-upscaled-x2-main-40k-v1"
+  }
+}

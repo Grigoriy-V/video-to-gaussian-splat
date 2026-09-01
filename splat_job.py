@@ -35,6 +35,19 @@ def validate_config(config: dict[str, Any]) -> None:
     if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise ValueError("source.sequence_manifest_sha256 must be a lowercase SHA-256")
 
+    masks = config.get("masks", {"enabled": False})
+    if not isinstance(masks.get("enabled"), bool):
+        raise ValueError("masks.enabled must be a boolean")
+    if masks["enabled"]:
+        mask_id = masks.get("mask_id")
+        if not isinstance(mask_id, str) or not JOB_ID_RE.fullmatch(mask_id):
+            raise ValueError("masks.mask_id must contain only lowercase letters, digits, and hyphens")
+        if masks.get("expected_count") != source["expected_image_count"]:
+            raise ValueError("masks.expected_count must equal source.expected_image_count")
+        mask_digest = masks.get("sequence_manifest_sha256")
+        if not isinstance(mask_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", mask_digest):
+            raise ValueError("masks.sequence_manifest_sha256 must be a lowercase SHA-256")
+
     prepare = config.get("prepare", {})
     minimum = prepare.get("minimum_registered_images")
     if not isinstance(minimum, int) or not 1 <= minimum <= source["expected_image_count"]:
@@ -54,6 +67,21 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError(f"training.{key} must be a positive integer")
     if training["smoke_steps"] >= training["main_steps"]:
         raise ValueError("smoke_steps must be lower than main_steps")
+    milestones = training.get("export_milestones", [])
+    if milestones:
+        if not isinstance(milestones, list) or any(
+            not isinstance(step, int) or step <= 0 for step in milestones
+        ):
+            raise ValueError("training.export_milestones must contain positive integers")
+        if milestones != sorted(set(milestones)):
+            raise ValueError("training.export_milestones must be sorted and unique")
+        if milestones[-1] != training["main_steps"]:
+            raise ValueError("the final export milestone must equal training.main_steps")
+        save_interval = training.get("steps_per_save")
+        if not isinstance(save_interval, int) or save_interval <= 0:
+            raise ValueError("training.steps_per_save must be a positive integer")
+        if any(step % save_interval for step in milestones):
+            raise ValueError("each export milestone must align with training.steps_per_save")
 
 
 def job_root(volume_root: Path, job_id: str) -> Path:
@@ -70,6 +98,13 @@ def image_manifest_sha256(image_dir: Path) -> tuple[str, list[Path]]:
         lines.append(f"{image.name} {digest}\n")
     manifest = "".join(lines).encode("utf-8")
     return hashlib.sha256(manifest).hexdigest(), images
+
+
+def dataset_root(config: dict[str, Any], root: Path) -> Path:
+    masks = config.get("masks", {"enabled": False})
+    if masks["enabled"]:
+        return root / "datasets" / masks["mask_id"]
+    return root / "processed"
 
 
 def prepare_command(config: dict[str, Any], root: Path) -> list[str]:
@@ -132,11 +167,11 @@ def expected_run_dir(config: dict[str, Any], root: Path, kind: str) -> Path:
 def training_command(config: dict[str, Any], root: Path, kind: str) -> list[str]:
     training = config["training"]
     identity = run_id(config, kind)
-    return [
+    command = [
         "ns-train",
         training["method"],
         "--data",
-        str(root / "processed"),
+        str(dataset_root(config, root)),
         "--output-dir",
         str(root / "training"),
         "--experiment-name",
@@ -147,6 +182,15 @@ def training_command(config: dict[str, Any], root: Path, kind: str) -> list[str]
         training["visualizer"],
         "--max-num-iterations",
         str(training_steps(config, kind)),
+    ]
+    if kind == "main" and training.get("export_milestones"):
+        command.extend([
+            "--steps-per-save",
+            str(training["steps_per_save"]),
+            "--save-only-latest-checkpoint",
+            "False",
+        ])
+    command.extend([
         "--pipeline.model.background-color",
         training["background_color"],
         "nerfstudio-data",
@@ -156,7 +200,8 @@ def training_command(config: dict[str, Any], root: Path, kind: str) -> list[str]
         training["eval_mode"],
         "--load-3D-points",
         str(training["load_3d_points"]),
-    ]
+    ])
+    return command
 
 
 def export_command(config: dict[str, Any], root: Path, kind: str) -> list[str]:
@@ -168,4 +213,24 @@ def export_command(config: dict[str, Any], root: Path, kind: str) -> list[str]:
         str(expected_run_dir(config, root, kind) / "config.yml"),
         "--output-dir",
         str(root / "export" / identity),
+    ]
+
+
+def milestone_checkpoint_step(iterations: int) -> int:
+    """Map a human iteration count to Nerfstudio's zero-based checkpoint step."""
+    if iterations <= 0:
+        raise ValueError("iterations must be positive")
+    return iterations - 1
+
+
+def milestone_export_command(
+    config_path: Path, output_dir: Path
+) -> list[str]:
+    return [
+        "ns-export",
+        "gaussian-splat",
+        "--load-config",
+        str(config_path),
+        "--output-dir",
+        str(output_dir),
     ]
