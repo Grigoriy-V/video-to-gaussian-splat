@@ -39,6 +39,9 @@ The proposed independent masking and upscaling service, the first local
 ComfyUI proof of concept, and the controlled reconstruction comparisons are
 recorded in the
 [preprocessing App design](docs/preprocessing-app-design.md).
+Generated-input confidence, optical-flow, NVOFA, and depth-prior candidates are
+tracked in the
+[generated-input consistency research notes](docs/generated-input-consistency-research.md).
 
 ## Long-term role in generation
 

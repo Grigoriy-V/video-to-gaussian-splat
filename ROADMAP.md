@@ -204,6 +204,71 @@ Each comparison needs an immutable config, smoke result, cost/timing record,
 visual evidence, and a separate report. Avoid broad sweeps until individual
 variables have shown useful signal.
 
+### Generated-input robustness candidates
+
+AI-generated orbit video can look temporally smooth while containing local
+cross-view contradictions: facial features, glasses, hair, clothing folds,
+silhouettes, lighting, or geometry may drift between frames. Ordinary static
+3DGS attempts to explain every version simultaneously, which can produce
+floaters, translucent duplicates, unstable boundaries, and oversized or
+elongated Gaussians. The following are candidate controlled experiments, not
+approved runs.
+
+Recommended order:
+
+1. **Frame-consistency filtering.** Score frames using COLMAP reprojection
+   error and track support, sharpness, adjacent-frame optical-flow residuals,
+   feature-space consistency, and abnormal silhouette or subject-scale change.
+   Remove only the worst candidate frames while preserving uniform angular
+   coverage. Compare the filtered sequence against the unchanged full sequence
+   with the same trainer configuration.
+2. **Scale regularization.** Enable Splatfacto
+   `pipeline.model.use_scale_regularization` with every other variable frozen.
+   Evaluate whether it reduces long, spiky, or oversized floaters without
+   removing legitimate hair, glasses, or shoulder detail.
+3. **Local inconsistency confidence.** Build per-pixel confidence from
+   adjacent-view warping residuals and feature consistency. Down-weight or
+   ignore only locally contradictory supervision rather than applying a hard
+   semantic foreground mask to the entire subject boundary.
+4. **Robust reconstruction loss.** Compare the current L1/SSIM supervision
+   against a bounded robust alternative such as Charbonnier, Huber, trimmed
+   residuals, or learned/per-pixel confidence weights. Record exactly which
+   pixels are suppressed and avoid adapting the rule from final-view results.
+5. **Reduced spherical-harmonic capacity.** Compare SH degree 3 against degree
+   1 and 0. This tests whether view-dependent color is hiding generated
+   cross-view contradictions rather than representing stable geometry.
+6. **Appearance normalization.** Test bilateral-grid or equivalent exposure
+   correction only when measured inconsistencies are primarily brightness,
+   white-balance, or contrast changes. Do not treat it as a remedy for changing
+   facial or object geometry.
+7. **Multi-view-aware Gaussian pruning.** Starting from an immutable raw
+   export, identify primitives with weak multi-camera support, abnormal scale,
+   persistent cross-view residuals, or negligible contribution. Retain the raw
+   PLY and evaluate conservative pruning plus a short refinement as a separate
+   run.
+8. **Geometry priors.** Evaluate aligned monocular depth, VGGT, DUSt3R, or a
+   related pose/depth prior only after validating its own cross-view
+   consistency. Generated or monocular depth must not be treated as ground
+   truth.
+
+The first proposed sequence is therefore:
+
+```text
+accepted full generated sequence
+  -> frame-consistency filtering A/B
+  -> scale-regularization A/B
+  -> local inconsistency weighting A/B
+```
+
+Do not combine frame removal, a new camera solve, scale regularization, robust
+loss, and SH changes in one first run. Frame-level rejection must also preserve
+camera coverage; selecting only visually easy frontal views is not an accepted
+improvement.
+
+Detailed research notes for optical flow, NVIDIA NVOFA, inconsistency maps,
+Depth Anything, and depth-guided reconstruction are maintained in
+`docs/generated-input-consistency-research.md`.
+
 ## Preprocessing service -- separate future component
 
 The proposed batch App `video-to-gaussian-splat-preprocess` remains independent
