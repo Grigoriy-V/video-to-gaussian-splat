@@ -12,6 +12,14 @@ a real camera, a DCC render, or a generative video model. The important
 assumption is that the frames show one predominantly static scene from changing
 camera viewpoints.
 
+## Demo
+
+[![AI-generated orbit and reconstructed Gaussian Splat](docs/assets/h3-orbit-to-gaussian-splat-preview.png)](docs/assets/h3-orbit-to-gaussian-splat-demo.mp4)
+
+The upper half shows the AI-generated orbit input. The lower half shows the
+resulting 3D Gaussian Splat in SuperSplat. Click the preview to open the
+[10-second MP4](docs/assets/h3-orbit-to-gaussian-splat-demo.mp4).
+
 ## Current research focus
 
 The current research direction is the full generative reconstruction pipeline:
