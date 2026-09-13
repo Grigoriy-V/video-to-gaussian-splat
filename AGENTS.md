@@ -43,17 +43,28 @@ and rendered sequences remain valid inputs to the same reconstruction pipeline.
   `max_containers=1`, `scaledown_window=2`, and `retries=0`.
 - `status` is CPU-only. Do not add a warm GPU pool or `app.cls` model service
   without an explicit new requirement.
+- `attach-rgba` can create an immutable RGBA dataset by reusing a compatible,
+  accepted camera solution. RGBA and separate binary masks are mutually
+  exclusive.
+- Do not resume a Nerfstudio 1.1.5 Splatfacto run in place for step-count
+  comparisons; a verified resume attempt left the Gaussian tensors unchanged.
 
 ## Experiment state
 
-Experiment 01 is complete. Its accepted configuration is
-`configs/mix_back_clean_v1_largest_model_white.json`, and its full result is in
-`reports/experiment-01-h3-orbit-3dgs.md`.
+Experiments 01 through 04 are complete. The unmasked baseline used 94
+768 x 960 H3-generated frames, registered 94/94 cameras, trained ordinary
+Splatfacto for 30,000 steps with a fixed white background, and exported 85,834
+Gaussians. It demonstrated a coherent reconstruction with residual background
+artifacts. The hard binary-mask comparison was rejected visually. The x2
+unmasked comparison improved visible detail but retained the white fringe.
 
-The baseline used 94 unmasked 768 x 960 H3-generated frames, registered 94/94
-cameras, trained ordinary Splatfacto for 30,000 steps with a fixed white
-background, and exported 85,834 Gaussians. It demonstrated a coherent static
-character reconstruction with residual floating artifacts.
+The accepted foreground/background treatment is Experiment 04:
+`configs/mix_back_clean_v3_soft_alpha_random.json`. It attached 94
+native-resolution soft-alpha RGBA frames to the accepted camera solution,
+trained for 30,000 steps with a random background, and exported 68,899
+Gaussians. Visual inspection found that the white fringe and material
+background outliers were removed. Full evidence is in
+`reports/experiment-04-soft-alpha-rgba-3dgs.md`.
 
 Do not silently reinterpret the reported train loss as a validation metric.
 PSNR, SSIM, and LPIPS were not measured because the run used `eval_mode=all`
@@ -61,7 +72,6 @@ with no held-out frames.
 
 The following remain separate future experiments, not baseline features:
 
-- foreground masks;
 - MCMC strategy;
 - automatic PLY cleanup;
 - direct video/frame extraction;

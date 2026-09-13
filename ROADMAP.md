@@ -50,7 +50,7 @@ them effectively must be demonstrated rather than assumed.
 
 ## Completed foundation
 
-- Independent repository and private GitHub remote created.
+- Independent repository and GitHub remote created.
 - Batch-only Modal App `gaussian-splat-trainer` deployed.
 - Nvidia L4 runtime verified with Nerfstudio 1.1.5, gsplat 1.4.0, and COLMAP
   3.9.1.

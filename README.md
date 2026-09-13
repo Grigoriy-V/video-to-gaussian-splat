@@ -84,13 +84,10 @@ another tool, then upload the ordered PNG sequence.
 - scale-to-zero operation with no web endpoint or warm GPU pool;
 - preparation, training, export, and status reports stored in a Modal Volume.
 
-The current baseline uses ordinary Splatfacto. Foreground masks, MCMC, automatic
-PLY cleanup, direct video ingestion, and held-out evaluation are not part of the
-baseline implementation.
-
-The current experiment order is: completed native unmasked baseline, native
-frames with foreground masks, x2-upscaled frames with the same masks, MCMC, and
-then isolated improvements to splat optimization and evaluation.
+The current baseline uses ordinary Splatfacto. Both separate binary masks and
+RGBA inputs are supported, but the accepted treatment for the first generated
+orbit is soft alpha with a random training background. MCMC, automatic PLY
+cleanup, direct video ingestion, and held-out evaluation remain future work.
 
 ## First experiment
 
@@ -118,6 +115,26 @@ PSNR, SSIM, and LPIPS were not measured because all frames were used for
 training and no held-out evaluation split was defined. See the
 [full experiment report](reports/experiment-01-h3-orbit-3dgs.md) for the exact
 configuration, timings, artifact identity, limitations, and conclusions.
+
+## Accepted soft-alpha result
+
+The best result in the first experiment series reused the accepted 94-camera
+solution and attached 94 native-resolution RGBA frames. The alpha was generated
+locally with BiRefNet/VITMatte, adjusted inward by 2 pixels, and blurred by 1
+pixel. Splatfacto then composited it over a random background on each iteration.
+
+| Metric | Result |
+|---|---:|
+| Input | 94 RGBA frames, 768 x 960 |
+| Splatfacto optimization | 30,000 steps |
+| Training time on Nvidia L4 | 751.74 s |
+| Exported Gaussians | 68,899 |
+| Exported PLY size | 16.30 MiB |
+
+Visual inspection found that the white silhouette fringe disappeared and the
+material background outliers were removed. A small residual below the cropped
+bust remains where the source views contain no data. See the
+[soft-alpha report](reports/experiment-04-soft-alpha-rgba-3dgs.md).
 
 ## Architecture
 
@@ -176,9 +193,10 @@ python -m unittest discover -s tests -v
 
 ## Configure a job
 
-Create a new JSON file under `configs/`. A job records the expected image count,
-dimensions, sequence manifest, camera solve settings, training settings, and
-unique run IDs. Existing preparations, runs, and exports are never overwritten.
+Copy `configs/example.json` to a new file under `configs/`, then replace its
+placeholder path, image count, dimensions, sequence manifest, and run IDs. A
+job records the camera solve and training settings. Existing preparations,
+runs, and exports are never overwritten.
 
 The completed first test is recorded in:
 
@@ -239,7 +257,7 @@ Launch and export the main run only after accepting the smoke result:
 & $modalPython control.py --config $config --stage export --kind main
 ```
 
-### Foreground-mask experiment
+### Historical foreground-mask experiment
 
 The first masked comparison reuses the accepted 94-camera solution and creates
 an immutable derived Nerfstudio dataset. It does not modify the baseline
@@ -269,6 +287,24 @@ Inspect the smoke export before separately authorizing the 30,000-step run:
 
 `attach-masks` verifies count, dimensions, one-channel PNG encoding, and the
 frozen mask manifest before adding one `mask_path` to each registered frame.
+This binary-mask comparison was visually rejected; it remains documented as a
+reproducible negative result.
+
+### Soft-alpha RGBA input
+
+RGBA inputs can reuse a compatible, already accepted camera solution. Upload
+the RGBA sequence to the job input path, configure `rgba.enabled`,
+`rgba.dataset_id`, and `rgba.camera_source_job_id`, then run:
+
+```powershell
+& $modalPython control.py --config $config --stage attach-rgba
+& $modalPython control.py --config $config --stage train --kind smoke
+& $modalPython control.py --config $config --stage export --kind smoke
+```
+
+Do not enable both `rgba` and separate `masks` for the same job. Camera reuse is
+valid only when the RGBA filenames, dimensions, ordering, and scene views match
+the source camera solution.
 
 Status is read through the Modal SDK and does not request a GPU:
 
@@ -295,8 +331,24 @@ tests/           offline unit tests
 
 - input must already be an ordered PNG sequence;
 - reconstruction assumes a static scene;
-- the baseline has no foreground masks;
+- foreground treatment is optional and must be selected per job;
 - residual or disconnected Gaussians are not automatically removed;
 - the default first-test protocol has no held-out view metrics;
 - successful COLMAP registration does not guarantee geometrically correct
   unseen surfaces.
+
+## Data and third-party software
+
+Source videos, frames, model checkpoints, trained splats, credentials, and
+Modal Volume contents are not included in this repository. Users are
+responsible for the rights to their inputs and outputs. The runtime builds on
+Modal, COLMAP, Nerfstudio, and gsplat; consult each upstream project for its
+license and usage terms.
+
+Historical experiment configs intentionally preserve provenance metadata such
+as local source paths and Modal job IDs. Copy and adapt them rather than
+expecting them to run unchanged on another machine.
+
+## License
+
+This repository is released under the [Apache License 2.0](LICENSE).
