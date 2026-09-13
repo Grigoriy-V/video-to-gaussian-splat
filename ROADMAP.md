@@ -59,6 +59,8 @@ them effectively must be demonstrated rather than assumed.
   registration gate, training, export, and CPU-only status paths implemented.
 - COLMAP preparation made robust to multiple sparse components by selecting the
   model with the greatest number of registered images.
+- Motion-weighted frame subsampling is available locally through
+  `tools/select_motion_frames.py`, with immutable `selection.json` output.
 
 ## Experiment 01: native unmasked baseline -- complete
 

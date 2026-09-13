@@ -79,7 +79,21 @@ particular conditioning format depends on the downstream generation model. The
 ordered experiment plan is maintained in [ROADMAP.md](ROADMAP.md).
 
 MP4 ingestion is not implemented yet. Extract frames first with FFmpeg or
-another tool, then upload the ordered PNG sequence.
+another tool. To retain a smaller motion-weighted subset, with denser sampling
+around the fastest part of the move, run:
+
+```powershell
+python tools/select_motion_frames.py "D:\path\to\frames" `
+  --keep 50 `
+  --power 3 `
+  --center 0.5 `
+  --linear-mix 0.35 `
+  --output "D:\path\to\selected-frames"
+```
+
+The source sequence is left unchanged. The selected frames and a reproducible
+`selection.json` manifest are written to the output directory. A power of `1`
+selects uniformly; larger values retain more frames near `center`.
 
 ## What it provides
 
@@ -334,6 +348,7 @@ configs/         immutable experiment configurations
 docs/            design notes and research plans
 reports/         experiment results and limitations
 tests/           offline unit tests
+tools/           local frame preparation utilities
 ```
 
 ## Current limitations

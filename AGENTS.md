@@ -38,6 +38,8 @@ and rendered sequences remain valid inputs to the same reconstruction pipeline.
 - Method: Nerfstudio Splatfacto with gsplat.
 - Camera preparation: COLMAP with automatic selection of the sparse model that
   has the greatest registered-image count.
+- Local frame preparation includes `tools/select_motion_frames.py` for
+  reproducible motion-weighted subsampling of an extracted image sequence.
 - Control path: Modal SDK named functions; there is no HTTP or web endpoint.
 - GPU functions use `min_containers=0`, `buffer_containers=0`,
   `max_containers=1`, `scaledown_window=2`, and `retries=0`.
